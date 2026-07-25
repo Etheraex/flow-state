@@ -1,0 +1,29 @@
+# Compiled binary (module builds to ./flow-state)
+/flow-state
+*.exe
+*.out
+
+# Go test & profiling artifacts
+*.test
+*.prof
+*.pprof
+coverage.out
+coverage.html
+
+# Go workspace file — machine-specific, don't share
+go.work
+go.work.sum
+
+# Editor / OS cruft
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Local Claude overrides (keep the shared .claude/ committed)
+.claude/settings.local.json
+
+# Secrets — uncomment when the project grows a config file
+# .env
+# .env.*
