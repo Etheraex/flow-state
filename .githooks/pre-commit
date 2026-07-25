@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — refuse commits that leak secrets/local paths; run go vet.
+# Bypass a false positive with:  git commit --no-verify
+set -u
+
+fail=0
+note() { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=1; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# 1) Files that are secrets by their nature — never commit these.
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.pem|*.key|*.p12|*.pfx|id_rsa|id_dsa|id_ecdsa|id_ed25519|.env|.env.*|*.env)
+      note "sensitive file staged: $f" ;;
+  esac
+done <<EOF
+$staged
+EOF
+
+# 2) Secret-shaped content and local paths in the added lines only.
+added=$(git diff --cached --diff-filter=ACM -U0 | grep '^+' | grep -v '^+++')
+
+printf '%s\n' "$added" | grep -qE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+  && note "private key material in the diff"
+printf '%s\n' "$added" | grep -qE 'AKIA[0-9A-Z]{16}' \
+  && note "AWS access key id in the diff"
+printf '%s\n' "$added" | grep -qEi '(secret|password|passwd|api[_-]?key|token)[[:space:]]*[:=][[:space:]]*["'\''][^"'\'' ]{6,}' \
+  && note "hardcoded credential in the diff"
+printf '%s\n' "$added" | grep -qE '/(home|Users)/[A-Za-z0-9._-]+/' \
+  && note "absolute home path (leaks your username) in the diff"
+
+# 3) go vet (+ staticcheck if installed) on packages with staged .go files.
+if command -v go >/dev/null 2>&1; then
+  pkgs=$(printf '%s\n' "$staged" | grep -E '\.go$' | xargs -r -n1 dirname | sort -u | sed 's#^#./#')
+  if [ -n "$pkgs" ]; then
+    go vet $pkgs || note "go vet reported issues"
+    command -v staticcheck >/dev/null 2>&1 && { staticcheck $pkgs || note "staticcheck reported issues"; }
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  printf '\npre-commit blocked. Fix the above, or bypass intentionally with: git commit --no-verify\n'
+  exit 1
+fi
+exit 0
