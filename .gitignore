@@ -3,6 +3,9 @@
 *.exe
 *.out
 
+# Go build
+/bin/
+
 # Go test & profiling artifacts
 *.test
 *.prof
